@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:metadata="http://www.mulesoft.org/schema/mule/metadata" xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:vm="http://www.mulesoft.org/schema/mule/vm" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/vm http://www.mulesoft.org/schema/mule/vm/current/mule-vm.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd">
+    <http:listener-config name="HTTP_Listener_Configuration" host="0.0.0.0" port="8081" doc:name="HTTP Listener Configuration"/>
+    <http:request-config name="HTTP_Request_Configuration" protocol="HTTPS" host="a.klaviyo.com" port="443" basePath="/api/" doc:name="HTTP Request Configuration"/>
+    <db:mysql-config name="MySQL_Configuration" host="${db.host}" port="${db.port}" user="${db.user}" password="${db.password}" database="${db.db}" doc:name="MySQL Configuration"/>
+    <flow name="klaviyo-exampleFlow3">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/track" doc:name="HTTP"/>
+        <vm:outbound-endpoint exchange-pattern="request-response" path="process-records" doc:name="VM"/>
+    </flow>
+    
+    <flow name="klaviyo-exampleFlow1">
+        <file:inbound-endpoint path="src/main/resources/in" moveToDirectory="src/main/resources/processed" responseTimeout="10000" doc:name="File"/>
+        <set-session-variable variableName="token" value="${klaviyo.token}" doc:name="Session Variable"/>
+        <dw:transform-message doc:name="Transform Message" metadata:id="2e0e96b2-5d6d-43c8-80c1-8004f6145d33">
+            <dw:input-payload mimeType="application/csv" doc:sample="/Users/dejimjuang/Workspace/renovationbrands/klaviyo-example/src/main/resources/data.csv"/>
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+{
+	token: sessionVars.token,
+	event: "Elected President",
+	customer_properties: {
+		"\$email": payload[0].email
+	},
+	properties: {
+		PreviouslyVicePresident: true,
+		YearElected: 2000,
+		VicePresidents: ["File"]
+	},
+	time: now as :number
+}]]></dw:set-payload>
+        </dw:transform-message>
+        <vm:outbound-endpoint exchange-pattern="one-way" path="process-records" doc:name="VM"/>
+    </flow>
+    <flow name="klaviyo-exampleFlow2">
+        <poll doc:name="Poll">
+            <fixed-frequency-scheduler frequency="30" timeUnit="SECONDS"/>
+            <db:select config-ref="MySQL_Configuration" doc:name="Database">
+                <db:parameterized-query><![CDATA[select * from records where id = 1]]></db:parameterized-query>
+            </db:select>
+        </poll>
+        <set-session-variable variableName="token" value="${klaviyo.token}" doc:name="Session Variable"/>
+        <foreach doc:name="For Each">
+            <dw:transform-message doc:name="Transform Message" metadata:id="9b73abab-2257-43f3-9829-da73aa0c000e">
+                <dw:input-payload doc:sample="sample_data/map.dwl"/>
+                <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+{
+	token: sessionVars.token,
+	event: "Elected President",
+	customer_properties: {
+		"\$email": payload.email
+	},
+	properties: {
+		PreviouslyVicePresident: true,
+		YearElected: 1979,
+		VicePresidents: ["Database"]
+	},
+	time: now as :number
+}]]></dw:set-payload>
+            </dw:transform-message>
+            <vm:outbound-endpoint exchange-pattern="one-way" path="process-records" doc:name="VM"/>
+        </foreach>
+    </flow>
+    <flow name="klaviyo-exampleFlow">
+        <vm:inbound-endpoint exchange-pattern="one-way" path="process-records" doc:name="VM"/>
+        <logger level="INFO" doc:name="Logger" message="#[payload]"/>
+        <base64-encoder-transformer doc:name="Base64 Encode" />
+        <logger message="#[payload]" level="INFO" doc:name="Logger"/>
+        
+        <http:request config-ref="HTTP_Request_Configuration" path="track" method="GET" doc:name="Klayvio - Track">
+            <http:request-builder>
+                <http:query-param paramName="data" value="#[payload]"/>
+            </http:request-builder>
+        </http:request>
+        
+    </flow>
+</mule>

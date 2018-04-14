@@ -1,0 +1,13 @@
+{
+  "token" : "PZC7E3",
+  "event" : "Elected President",
+  "customer_properties" : {
+    "$email" : "thomas.jefferson@example.com"
+  },
+  "properties" : {
+    "PreviouslyVicePresident" : true,
+    "YearElected" : 1801,
+    "VicePresidents" : ["Aaron Burr", "George Clinton"]
+  },
+  "time" : 1522797166
+}
